@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:google_fonts/google_fonts.dart'; // Asegúrate de tenerlo en tu pubspec.yaml
+import 'package:google_fonts/google_fonts.dart'; 
+// 1. ---> AGREGA ESTA IMPORTACIÓN <---
+import 'package:flutter_localizations/flutter_localizations.dart'; 
 import 'pantallas/pantalla_login.dart';
 
 void main() async {
@@ -27,14 +29,25 @@ class CalmaVisionB extends StatelessWidget {
     return MaterialApp(
       title: 'Calma Vision - Familia',
       debugShowCheckedModeBanner: false,
+      
+      // 2. ---> AGREGA ESTAS LÍNEAS PARA EL IDIOMA <---
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es', 'ES'), // Soporte para Español
+        Locale('en', 'US'), // Soporte para Inglés (por si acaso)
+      ],
+      // ----------------------------------------------
+
       theme: ThemeData(
-        // Colores suaves inspirados en Calma Vision A
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF4A90E2), // Azul calmante
-          background: const Color(0xFFF5F7FA), // Fondo gris muy claro
+          seedColor: const Color(0xFF4A90E2),
+          background: const Color(0xFFF5F7FA), 
         ),
         useMaterial3: true,
-        // Usamos Roboto para mantener la identidad de marca
         textTheme: GoogleFonts.robotoTextTheme(), 
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(

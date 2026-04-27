@@ -26,10 +26,10 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
       
-      // Se extrae el terminal_id en lugar del correo de la tabla 'usuarios'
+      // CORRECCIÓN 1: Usamos la tabla 'vinculaciones'
       final data = await Supabase.instance.client
-          .from('vinculos_terminales')
-          .select('paciente_id, usuarios!paciente_id(nombre, terminal_id)')
+          .from('vinculaciones')
+          .select('paciente_id, usuarios(nombre, terminal_id)')
           .eq('cuidador_id', user.id);
       
       if (mounted) {
@@ -81,7 +81,7 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
               controller: terminalIdCont, 
               keyboardType: TextInputType.text,
               decoration: InputDecoration(
-                labelText: "ID de Terminal (ej. Fresa1234)", 
+                labelText: "ID de Terminal (ej. Pera9033)", 
                 prefixIcon: const Icon(Icons.tablet_mac),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
               ),
@@ -114,31 +114,43 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
                 ),
                 onPressed: () async {
                   try {
-                    // Validamos la conexión usando terminal_id y pin
+                    // 1. Buscamos a ver si existe una tableta con ese ID y PIN
                     final paciente = await Supabase.instance.client
                         .from('usuarios')
                         .select('id')
                         .eq('terminal_id', terminalIdCont.text.trim())
                         .eq('pin', pinCont.text.trim())
-                        .single();
+                        .maybeSingle(); // Usamos maybeSingle para controlar si no encuentra nada
                     
-                    await Supabase.instance.client.from('vinculos_terminales').insert({
+                    if (paciente == null) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("ID de Terminal o PIN incorrectos"), backgroundColor: Colors.orange)
+                        );
+                      }
+                      return;
+                    }
+
+                    // CORRECCIÓN 2: Insertamos en la tabla 'vinculaciones' correcta
+                    await Supabase.instance.client.from('vinculaciones').insert({
                       'cuidador_id': Supabase.instance.client.auth.currentUser!.id,
                       'paciente_id': paciente['id'],
                     });
                     
                     if (mounted) {
                       Navigator.pop(context);
-                      _cargarTerminales();
+                      _cargarTerminales(); // Recarga la lista
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text("Conexión establecida correctamente"), backgroundColor: Colors.green)
                       );
                     }
                   } catch (e) {
                     if (mounted) {
+                      // Ahora sí veremos el error real (RLS, Duplicados, etc.)
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("ID de Terminal o PIN incorrectos"), backgroundColor: Colors.redAccent)
+                        SnackBar(content: Text("Error al vincular: $e"), backgroundColor: Colors.redAccent)
                       );
+                      debugPrint(e.toString());
                     }
                   }
                 }, 
@@ -203,6 +215,10 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
   }
 
   Widget _construirTarjetaTerminal(Map<String, dynamic> t) {
+    // Protección por si la data relacional viene nula
+    final nombre = t['usuarios']?['nombre'] ?? 'Desconocido';
+    final terminalId = t['usuarios']?['terminal_id'] ?? 'Desconocido';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
@@ -221,19 +237,18 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
           child: const Icon(Icons.elderly, color: Color(0xFF4A90E2), size: 28),
         ),
         title: Text(
-          t['usuarios']['nombre'], 
+          nombre, 
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: Color(0xFF2C3E50), fontFamily: 'Roboto')
         ),
         subtitle: Text(
-          // Muestra el ID de la terminal en la tarjeta
-          "ID Terminal: ${t['usuarios']['terminal_id'] ?? 'Desconocido'}", 
+          "ID Terminal: $terminalId", 
           style: const TextStyle(color: Colors.blueGrey, fontSize: 14)
         ),
         trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 22),
         onTap: () => Navigator.push(context, MaterialPageRoute(
           builder: (context) => PantallaInicio(
             pacienteId: t['paciente_id'], 
-            nombrePaciente: t['usuarios']['nombre']
+            nombrePaciente: nombre
           )
         )),
       ),
