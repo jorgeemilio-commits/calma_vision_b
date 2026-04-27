@@ -26,10 +26,10 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
       
-      // Consultamos los vínculos y traemos el nombre y correo de la tabla 'usuarios' (App A)
+      // Se extrae el terminal_id en lugar del correo de la tabla 'usuarios'
       final data = await Supabase.instance.client
           .from('vinculos_terminales')
-          .select('paciente_id, usuarios!paciente_id(nombre, email)')
+          .select('paciente_id, usuarios!paciente_id(nombre, terminal_id)')
           .eq('cuidador_id', user.id);
       
       if (mounted) {
@@ -44,9 +44,9 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
     }
   }
 
-  // --- MODAL DE VINCULACIÓN (CORREO + PIN) ---
+  // --- MODAL DE VINCULACIÓN (TERMINAL ID + PIN) ---
   void _abrirAgregarTerminalModal() {
-    final emailCont = TextEditingController();
+    final terminalIdCont = TextEditingController();
     final pinCont = TextEditingController();
 
     showModalBottomSheet(
@@ -71,33 +71,33 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
             ),
             const SizedBox(height: 10),
             const Text(
-              "Ingresa el correo y el PIN de 8 dígitos que aparece en la tableta de tu familiar.", 
+              "Ingresa el ID de la Terminal y el PIN que aparece en los ajustes de la tableta de tu familiar.", 
               style: TextStyle(color: Colors.blueGrey, fontSize: 15, fontFamily: 'Roboto')
             ),
             const SizedBox(height: 25),
             
-            // CAMPO: CORREO
+            // CAMPO: TERMINAL ID
             TextField(
-              controller: emailCont, 
-              keyboardType: TextInputType.emailAddress,
+              controller: terminalIdCont, 
+              keyboardType: TextInputType.text,
               decoration: InputDecoration(
-                labelText: "Correo de la Tableta", 
-                prefixIcon: const Icon(Icons.tablet_android),
+                labelText: "ID de Terminal (ej. Fresa1234)", 
+                prefixIcon: const Icon(Icons.tablet_mac),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
               ),
             ),
             const SizedBox(height: 15),
             
-            // CAMPO: PIN DE 8 DÍGITOS
+            // CAMPO: PIN DE SEGURIDAD
             TextField(
               controller: pinCont,
               keyboardType: TextInputType.number,
               maxLength: 8,
               obscureText: true,
               decoration: InputDecoration(
-                labelText: "PIN de Seguridad (8 dígitos)", 
+                labelText: "PIN de Seguridad", 
                 prefixIcon: const Icon(Icons.lock_person_outlined),
-                counterText: "", // Oculta el contador para diseño limpio
+                counterText: "", 
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
               ),
             ),
@@ -114,15 +114,14 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
                 ),
                 onPressed: () async {
                   try {
-                    // Validamos Correo y PIN contra la tabla 'usuarios'
+                    // Validamos la conexión usando terminal_id y pin
                     final paciente = await Supabase.instance.client
                         .from('usuarios')
                         .select('id')
-                        .eq('email', emailCont.text.trim())
+                        .eq('terminal_id', terminalIdCont.text.trim())
                         .eq('pin', pinCont.text.trim())
                         .single();
                     
-                    // Si existe, insertamos el vínculo
                     await Supabase.instance.client.from('vinculos_terminales').insert({
                       'cuidador_id': Supabase.instance.client.auth.currentUser!.id,
                       'paciente_id': paciente['id'],
@@ -138,7 +137,7 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Correo o PIN incorrectos"), backgroundColor: Colors.redAccent)
+                        const SnackBar(content: Text("ID de Terminal o PIN incorrectos"), backgroundColor: Colors.redAccent)
                       );
                     }
                   }
@@ -187,7 +186,6 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
                 
                 const SizedBox(height: 25),
                 
-                // BOTÓN AGREGAR (ESTILO CALMA VISION)
                 OutlinedButton.icon(
                   onPressed: _abrirAgregarTerminalModal, 
                   icon: const Icon(Icons.add_link, size: 24), 
@@ -227,7 +225,8 @@ class _PantallaSeleccionTerminalState extends State<PantallaSeleccionTerminal> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: Color(0xFF2C3E50), fontFamily: 'Roboto')
         ),
         subtitle: Text(
-          t['usuarios']['email'], 
+          // Muestra el ID de la terminal en la tarjeta
+          "ID Terminal: ${t['usuarios']['terminal_id'] ?? 'Desconocido'}", 
           style: const TextStyle(color: Colors.blueGrey, fontSize: 14)
         ),
         trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 22),
