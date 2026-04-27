@@ -1,7 +1,9 @@
 name: calma_vision_b
 description: "A new Flutter project."
-publish_to: 'none'
-version: 0.1.0
+
+publish_to: 'none' 
+
+version: 1.0.0+1
 
 environment:
   sdk: ^3.9.2
@@ -9,6 +11,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  cupertino_icons: ^1.0.8
+  table_calendar: ^3.1.2
+  image_picker: ^1.2.1
+  intl: ^0.20.2
+  supabase_flutter: ^2.12.4
+  google_fonts: ^6.2.1
+  flutter_localizations:
+    sdk: flutter
+  speech_to_text: ^6.6.1
 
 dev_dependencies:
   flutter_test:
