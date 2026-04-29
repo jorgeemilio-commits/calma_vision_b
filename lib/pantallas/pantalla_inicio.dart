@@ -56,7 +56,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
     const colorBotonLlamada = Color(0xFF64DD17); // Verde brillante
 
     return Scaffold(
-      backgroundColor: Colors.grey[200], // Fondo exterior para web
+      backgroundColor: colorFondo, // Fondo exterior para web
       
       // BARRA LATERAL (DRAWER)
       drawer: Drawer(
