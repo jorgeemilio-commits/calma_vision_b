@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'pantalla_medicinas_familiar.dart';
 import 'pantalla_agenda_familiar.dart';
 import 'pantalla_galeria_familiar.dart';
-
+import 'pantalla_notas_familiar.dart';
 class PantallaInicio extends StatefulWidget {
   final String pacienteId;
   final String nombrePaciente;
@@ -168,17 +168,16 @@ class _PantallaInicioState extends State<PantallaInicio> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _botonModuloRapido(context, Icons.medical_services, "Tratamiento", () {
+                          _botonModuloRapido(context, Icons.medical_services, "Medicina", () {
                             Navigator.push(context, MaterialPageRoute(builder: (context) => PantallaMedicinasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)));
                           }),
                           _botonModuloRapido(context, Icons.calendar_month, "Agenda", () {
-                            // TODO: Crear PantallaAgendaFamiliar
-                            // Navigator.push(context, MaterialPageRoute(builder: (context) => const PantallaAgendaFamiliar()));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Abriendo Agenda...")));
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => PantallaAgendaFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)));
+                          }),
+                          _botonModuloRapido(context, Icons.edit_note, "Notas", () {
+                           Navigator.push(context, MaterialPageRoute(builder: (context) => PantallaNotasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)));
                           }),
                           _botonModuloRapido(context, Icons.photo_library, "Galería", () {
-                            // TODO: Crear PantallaGaleriaFamiliar
-                            // Navigator.push(context, MaterialPageRoute(builder: (context) => const PantallaGaleriaFamiliar()));
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Abriendo Galería...")));
                           }),
                         ],
