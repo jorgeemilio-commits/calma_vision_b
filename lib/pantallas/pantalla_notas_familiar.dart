@@ -37,7 +37,7 @@ class _PantallaNotasFamiliarState extends State<PantallaNotasFamiliar> {
           .select()
           .eq('usuario_id', widget.pacienteId)
           .order('fecha', ascending: false)
-          .order('hora', ascending: false);
+          .order('created_at', ascending: false); // Usamos created_at en lugar de hora
 
       if (mounted) {
         setState(() {
@@ -153,12 +153,12 @@ class _PantallaNotasFamiliarState extends State<PantallaNotasFamiliar> {
                       setModalState(() => guardando = true);
                       
                       try {
+                        // AQUÍ ESTÁ LA CORRECCIÓN CLAVE: Ya no mandamos la columna 'hora'
                         await Supabase.instance.client.from('notas_medicas').insert({
                           'usuario_id': widget.pacienteId,
                           'titulo': tituloCtrl.text.trim(),
                           'contenido': contenidoCtrl.text.trim(),
                           'fecha': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                          'hora': DateFormat('HH:mm:ss').format(DateTime.now()),
                         });
                         
                         if (mounted) {
@@ -229,8 +229,16 @@ class _PantallaNotasFamiliarState extends State<PantallaNotasFamiliar> {
               itemCount: _notas.length,
               itemBuilder: (context, index) {
                 final nota = _notas[index];
-                final String horaCortada = nota['hora']?.toString().substring(0, 5) ?? '';
+                
+                // Formateamos la fecha normal
                 final String fechaFormateada = DateFormat('dd MMM yyyy', 'es').format(DateTime.parse(nota['fecha']));
+                
+                // Extraemos la hora directamente de created_at para mostrarla en la UI
+                String horaFormateada = '';
+                if (nota['created_at'] != null) {
+                  final DateTime fechaCreacion = DateTime.parse(nota['created_at']).toLocal();
+                  horaFormateada = DateFormat('HH:mm').format(fechaCreacion);
+                }
 
                 return Card(
                   elevation: 0,
@@ -266,7 +274,8 @@ class _PantallaNotasFamiliarState extends State<PantallaNotasFamiliar> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    "$fechaFormateada • $horaCortada hrs", 
+                                    // Mostramos la fecha y la hora extraída
+                                    horaFormateada.isNotEmpty ? "$fechaFormateada • $horaFormateada hrs" : fechaFormateada, 
                                     style: TextStyle(color: colorPrimario, fontWeight: FontWeight.bold, fontSize: 13)
                                   ),
                                 ],

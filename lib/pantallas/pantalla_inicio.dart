@@ -1,269 +1,281 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
+
 import 'pantalla_medicinas_familiar.dart';
 import 'pantalla_agenda_familiar.dart';
-import 'pantalla_galeria_familiar.dart';
 import 'pantalla_notas_familiar.dart';
+import 'pantalla_galeria_familiar.dart';
+import 'pantalla_historial_actividad.dart';
+
 class PantallaInicio extends StatefulWidget {
   final String pacienteId;
   final String nombrePaciente;
 
-  const PantallaInicio({
-    super.key,
-    required this.pacienteId,
-    required this.nombrePaciente,
-  });
+  const PantallaInicio({super.key, required this.pacienteId, required this.nombrePaciente});
 
   @override
   State<PantallaInicio> createState() => _PantallaInicioState();
 }
 
 class _PantallaInicioState extends State<PantallaInicio> {
-  List<Map<String, dynamic>> _medicamentosActivos = [];
-  bool _cargandoMed = true;
+  List<Map<String, dynamic>> _proximasDosis = [];
+  List<Map<String, dynamic>> _actividades = [];
+  bool _cargando = true;
 
   @override
   void initState() {
     super.initState();
-    _cargarMedicamentos();
+    _refrescarTodo();
   }
 
-  // Carga un resumen de las medicinas para la tarjeta principal
+  Future<void> _refrescarTodo() async {
+    setState(() => _cargando = true);
+    await Future.wait([
+      _cargarMedicamentos(),
+      _cargarActividadReciente(),
+    ]);
+    if (mounted) setState(() => _cargando = false);
+  }
+
   Future<void> _cargarMedicamentos() async {
     try {
       final respuesta = await Supabase.instance.client
           .from('medicamentos')
           .select('nombre, dosis, horas_toma')
-          .eq('usuario_id', widget.pacienteId)
-          .limit(5); // Solo mostramos las próximas
+          .eq('usuario_id', widget.pacienteId);
 
-      if (mounted) {
-        setState(() {
-          _medicamentosActivos = List<Map<String, dynamic>>.from(respuesta);
-          _cargandoMed = false;
-        });
+      final ahora = DateTime.now();
+      List<Map<String, dynamic>> listaTemporal = [];
+
+      for (var med in respuesta) {
+        if (med['horas_toma'] != null) {
+          List<String> horas = med['horas_toma'].toString().split(',');
+          for (var h in horas) {
+            listaTemporal.add({
+              'nombre': med['nombre'],
+              'dosis': med['dosis'],
+              'horaString': h,
+              'horaData': _convertirAComparable(h),
+            });
+          }
+        }
       }
+
+      listaTemporal.sort((a, b) {
+        DateTime horaA = a['horaData'];
+        DateTime horaB = b['horaData'];
+        bool pasoA = horaA.isBefore(ahora);
+        bool pasoB = horaB.isBefore(ahora);
+        if (pasoA && !pasoB) return 1;
+        if (!pasoA && pasoB) return -1;
+        return horaA.compareTo(horaB);
+      });
+
+      _proximasDosis = listaTemporal;
     } catch (e) {
-      debugPrint("Error al cargar medicinas breves: $e");
-      if (mounted) setState(() => _cargandoMed = false);
+      debugPrint("Error medicinas: $e");
     }
+  }
+
+  Future<void> _cargarActividadReciente() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('actividad_reciente')
+          .select()
+          .eq('paciente_id', widget.pacienteId)
+          .order('created_at', ascending: false)
+          .limit(5);
+
+      _actividades = List<Map<String, dynamic>>.from(res);
+    } catch (e) {
+      debugPrint("Error actividad: $e");
+    }
+  }
+
+  DateTime _convertirAComparable(String horaStr) {
+    final partes = horaStr.split(':');
+    final ahora = DateTime.now();
+    return DateTime(ahora.year, ahora.month, ahora.day, int.parse(partes[0]), int.parse(partes[1]));
+  }
+
+  String _haceCuanto(String fechaIso) {
+    final fecha = DateTime.parse(fechaIso).toLocal();
+    final diff = DateTime.now().difference(fecha);
+    if (diff.inMinutes < 60) return "Hace ${diff.inMinutes} min";
+    if (diff.inHours < 24) return "Hace ${diff.inHours} h";
+    return DateFormat('dd/MM').format(fecha);
   }
 
   @override
   Widget build(BuildContext context) {
-    const colorPrimario = Color(0xFF0047A0); // Azul oscuro de tu diseño
-    const colorFondo = Color(0xFFE0F7FA); // Azul muy bajito de fondo
-    const colorBotonLlamada = Color(0xFF64DD17); // Verde brillante
+    const colorPrimario = Color(0xFF0047A0);
+    const colorFondo = Color(0xFFF7FEFF);
 
     return Scaffold(
-      backgroundColor: colorFondo, // Fondo exterior para web
-      
-      // BARRA LATERAL (DRAWER)
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: colorPrimario),
-              accountName: Text(widget.nombrePaciente, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              accountEmail: const Text("Paciente Activo"),
-              currentAccountPicture: const CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Icon(Icons.elderly, size: 40, color: colorPrimario),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Ajustes del Dispositivo'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ajustes pendientes")));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.exit_to_app, color: Colors.red),
-              title: const Text('Desvincular Paciente', style: TextStyle(color: Colors.red)),
-              onTap: () => Navigator.pop(context),
-            ),
-          ],
-        ),
+      backgroundColor: colorFondo,
+      appBar: AppBar(
+        backgroundColor: colorPrimario,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text("MI PACIENTE", 
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22)),
       ),
-      
-      // CUERPO RESTRINGIDO A TAMAÑO DE TELÉFONO (IDEAL PARA WEB)
       body: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 450), // Ancho máximo de celular
-          decoration: BoxDecoration(
-            color: colorFondo,
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
-          ),
-          child: Scaffold(
-            backgroundColor: Colors.transparent, // Para que tome el colorFondo del Container
-            
-            // APPBAR INTERNO
-            appBar: AppBar(
-              backgroundColor: colorPrimario,
-              iconTheme: const IconThemeData(color: Colors.white),
-              centerTitle: true,
-              title: const Text("MI PACIENTE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-              actions: const [
-                Padding(
-                  padding: EdgeInsets.only(right: 15.0),
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.person, color: colorPrimario), // Aquí iría la foto real
-                  ),
-                )
-              ],
-            ),
-            
-            // CONTENIDO PRINCIPAL
-            body: Stack(
-              children: [
-                SingleChildScrollView(
-                  padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 100),
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: _refrescarTodo,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      
-                      // 1. TARJETA DE MEDICINAS SCROLEABLE
-                      Container(
-                        height: 220, // Altura fija para que tenga scroll interno
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3))]
-                        ),
-                        child: Column(
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.only(top: 15, bottom: 5),
-                              child: Text("MEDICINAS", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 1.2)),
-                            ),
-                            Expanded(
-                              child: _cargandoMed 
-                                  ? const Center(child: CircularProgressIndicator())
-                                  : _medicamentosActivos.isEmpty
-                                      ? const Center(child: Text("No hay medicinas programadas", style: TextStyle(color: Colors.grey)))
-                                      : ListView.builder(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                                          itemCount: _medicamentosActivos.length,
-                                          itemBuilder: (context, index) {
-                                            final med = _medicamentosActivos[index];
-                                            return ListTile(
-                                              leading: const Icon(Icons.play_arrow, color: Colors.grey),
-                                              title: Text(med['horas_toma'] ?? 'Sin hora', style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                                              subtitle: Text("${med['nombre']} - ${med['dosis']}", style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
-                                            );
-                                          },
-                                        ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 25),
+                      // --- SECCIÓN MEDICINAS ---
+                      _construirSeccionMedicinas(colorPrimario),
+                      const SizedBox(height: 35),
 
-                      // 2. MÓDULOS PEQUEÑOS DE NAVEGACIÓN
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _botonModuloRapido(context, Icons.medical_services, "Medicina", () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => PantallaMedicinasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)));
-                          }),
-                          _botonModuloRapido(context, Icons.calendar_month, "Agenda", () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => PantallaAgendaFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)));
-                          }),
-                          _botonModuloRapido(context, Icons.edit_note, "Notas", () {
-                           Navigator.push(context, MaterialPageRoute(builder: (context) => PantallaNotasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)));
-                          }),
-                          _botonModuloRapido(context, Icons.photo_library, "Galería", () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Abriendo Galería...")));
-                          }),
-                        ],
-                      ),
-                      const SizedBox(height: 30),
+                      // --- BOTONES MÓDULOS ---
+                      _construirGridModulos(context, colorPrimario),
+                      const SizedBox(height: 45),
 
-                      // 3. ACTIVIDAD RECIENTE (Scrollable natural)
-                      const Text("ACTIVIDAD RECIENTE", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 1.2), textAlign: TextAlign.center),
-                      const SizedBox(height: 10),
-                      
-                      // Mockup de actividades (Después se conectará a Supabase)
-                      _tarjetaActividad(Icons.check_circle, "TOMÓ IBUPROFENO (8:00 AM)", "HACE 4 HORAS"),
-                      _tarjetaActividad(Icons.phone_in_talk, "LLAMADA CON HIJA", "HACE 1 HORA"),
-                      _tarjetaActividad(Icons.check_circle, "TOMÓ PARACETAMOL (11:00 AM)", "HACE 5 MIN"),
-                      
+                      // --- ACTIVIDAD RECIENTE ---
+                      _construirSeccionActividad(colorPrimario),
+                      const SizedBox(height: 120),
                     ],
                   ),
                 ),
-
-                // 4. BOTÓN DE LLAMADA FLOTANTE FIJO ABAJO
-                Positioned(
-                  bottom: 20,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Iniciando videollamada... (Próximamente)")));
-                      },
-                      child: Container(
-                        width: 100,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: colorBotonLlamada,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
-                        ),
-                        child: const Icon(Icons.phone, color: Colors.white, size: 35),
-                      ),
-                    ),
-                  ),
-                )
-              ],
-            ),
+              ),
+              _construirBotonLlamada(),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // Widget auxiliar para los botones de módulos
-  Widget _botonModuloRapido(BuildContext context, IconData icono, String titulo, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
+  Widget _construirSeccionMedicinas(Color color) {
+    return Container(
+      height: 240,
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(25),
+      ),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, 3))]
-            ),
-            child: Icon(icono, color: const Color(0xFF0047A0), size: 28),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Text("PRÓXIMAS DOSIS", 
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey, fontSize: 15, letterSpacing: 1.1)),
           ),
-          const SizedBox(height: 8),
-          Text(titulo, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          Expanded(
+            child: _proximasDosis.isEmpty
+                ? const Center(child: Text("No hay dosis pendientes", style: TextStyle(fontSize: 16)))
+                : ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: _proximasDosis.length > 3 ? 3 : _proximasDosis.length,
+                    itemBuilder: (context, i) {
+                      final d = _proximasDosis[i];
+                      return ListTile(
+                        leading: Icon(Icons.access_time, color: color, size: 22),
+                        title: Text(d['horaString'], 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 19)),
+                        subtitle: Text("${d['nombre']} - ${d['dosis']}", 
+                          style: const TextStyle(fontSize: 16)),
+                      );
+                    },
+                  ),
+          ),
         ],
       ),
     );
   }
 
-  // Widget auxiliar para las tarjetas de actividad reciente
-  Widget _tarjetaActividad(IconData icono, String titulo, String subtitulo) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, 2))]
+  Widget _construirSeccionActividad(Color color) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text("ACTIVIDAD RECIENTE", 
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey, fontSize: 15)),
+            TextButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => PantallaHistorialActividad(pacienteId: widget.pacienteId))),
+              child: const Text("Ver todo", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_actividades.isEmpty)
+          const Padding(padding: EdgeInsets.all(20), child: Text("Sin actividad reciente", style: TextStyle(fontSize: 16)))
+        else
+          ..._actividades.map((a) => Card(
+                elevation: 0,
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+                  leading: _obtenerIconoActividad(a['tipo']),
+                  title: Text(a['mensaje'], 
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, height: 1.2)),
+                  trailing: Text(_haceCuanto(a['created_at']), 
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ),
+              )),
+      ],
+    );
+  }
+
+  Icon _obtenerIconoActividad(String? tipo) {
+    switch (tipo) {
+      case 'medicamentos': return const Icon(Icons.medication, color: Colors.green, size: 24);
+      case 'galeria': return const Icon(Icons.image, color: Colors.orange, size: 24);
+      case 'recordatorios': return const Icon(Icons.event, color: Colors.blue, size: 24);
+      case 'notas_medicas': return const Icon(Icons.assignment, color: Colors.purple, size: 24);
+      default: return const Icon(Icons.info, size: 24);
+    }
+  }
+
+  Widget _construirGridModulos(BuildContext context, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _btn(context, Icons.medication, "Medicina", PantallaMedicinasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
+        _btn(context, Icons.calendar_month, "Agenda", PantallaAgendaFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
+        _btn(context, Icons.edit_note, "Notas", PantallaNotasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
+        _btn(context, Icons.collections, "Galería", PantallaGaleriaFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
+      ],
+    );
+  }
+
+  Widget _btn(BuildContext context, IconData icon, String label, Widget screen) {
+    return Column(children: [
+      IconButton.filled(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => screen)),
+        icon: Icon(icon, size: 28),
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white, 
+          foregroundColor: const Color(0xFF0047A0), 
+          padding: const EdgeInsets.all(18)
+        ),
       ),
-      child: ListTile(
-        leading: Icon(icono, color: Colors.blueGrey[300], size: 40),
-        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        subtitle: Text(subtitulo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+    ]);
+  }
+
+  Widget _construirBotonLlamada() {
+    return Positioned(
+      bottom: 25, left: 0, right: 0,
+      child: Center(
+        child: FloatingActionButton.large(
+          onPressed: () {}, 
+          backgroundColor: Colors.green, 
+          child: const Icon(Icons.phone, color: Colors.white, size: 45)
+        )
       ),
     );
   }
