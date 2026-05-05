@@ -7,6 +7,7 @@ import 'pantalla_agenda_familiar.dart';
 import 'pantalla_notas_familiar.dart';
 import 'pantalla_galeria_familiar.dart';
 import 'pantalla_historial_actividad.dart';
+import 'pantalla_mensajes_familiar.dart';
 
 class PantallaInicio extends StatefulWidget {
   final String pacienteId;
@@ -22,13 +23,79 @@ class _PantallaInicioState extends State<PantallaInicio> {
   List<Map<String, dynamic>> _proximasDosis = [];
   List<Map<String, dynamic>> _actividades = [];
   bool _cargando = true;
+  
+  // --- VARIABLE PARA EL S.O.S ---
+  RealtimeChannel? _canalSupabase;
 
   @override
   void initState() {
     super.initState();
     _refrescarTodo();
+    _configurarEscuchaSOS(); // Encendemos la alerta al entrar a la pantalla
   }
 
+  @override
+  void dispose() {
+    _canalSupabase?.unsubscribe(); // Apagamos el micrófono de la base de datos al salir
+    super.dispose();
+  }
+
+  // ==========================================
+  // LÓGICA DE ESCUCHA S.O.S. (TIEMPO REAL)
+  // ==========================================
+  void _configurarEscuchaSOS() {
+    _canalSupabase = Supabase.instance.client.channel('public:alertas_sos');
+    
+    _canalSupabase!.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'alertas_sos',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'paciente_id',
+        value: widget.pacienteId,
+      ),
+      callback: (payload) {
+        _mostrarAlertaEmergencia();
+      },
+    ).subscribe();
+  }
+
+  void _mostrarAlertaEmergencia() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Obliga al usuario a interactuar con el cuadro
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.redAccent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.white, size: 50),
+            SizedBox(width: 10),
+            Text("¡EMERGENCIA S.O.S!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 26)),
+          ],
+        ),
+        content: Text(
+          "${widget.nombrePaciente} ha presionado el botón de ayuda.",
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 20),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context), // Cierra la alerta
+            child: const Text("ENTENDIDO", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          )
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // LÓGICA DE CARGA DE DATOS NORMAL
+  // ==========================================
   Future<void> _refrescarTodo() async {
     setState(() => _cargando = true);
     await Future.wait([
@@ -107,6 +174,9 @@ class _PantallaInicioState extends State<PantallaInicio> {
     return DateFormat('dd/MM').format(fecha);
   }
 
+  // ==========================================
+  // CONSTRUCCIÓN DE LA INTERFAZ
+  // ==========================================
   @override
   Widget build(BuildContext context) {
     const colorPrimario = Color(0xFF0047A0);
@@ -240,31 +310,37 @@ class _PantallaInicioState extends State<PantallaInicio> {
   }
 
   Widget _construirGridModulos(BuildContext context, Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Wrap(
+      spacing: 15,
+      runSpacing: 15,
+      alignment: WrapAlignment.spaceEvenly,
       children: [
         _btn(context, Icons.medication, "Medicina", PantallaMedicinasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
         _btn(context, Icons.calendar_month, "Agenda", PantallaAgendaFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
         _btn(context, Icons.edit_note, "Notas", PantallaNotasFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
         _btn(context, Icons.collections, "Galería", PantallaGaleriaFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
+        _btn(context, Icons.chat, "Mensajes", PantallaMensajesFamiliar(pacienteId: widget.pacienteId, nombrePaciente: widget.nombrePaciente)),
       ],
     );
   }
 
   Widget _btn(BuildContext context, IconData icon, String label, Widget screen) {
-    return Column(children: [
-      IconButton.filled(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => screen)),
-        icon: Icon(icon, size: 28),
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.white, 
-          foregroundColor: const Color(0xFF0047A0), 
-          padding: const EdgeInsets.all(18)
+    return SizedBox(
+      width: 75,
+      child: Column(children: [
+        IconButton.filled(
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => screen)),
+          icon: Icon(icon, size: 28),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.white, 
+            foregroundColor: const Color(0xFF0047A0), 
+            padding: const EdgeInsets.all(18)
+          ),
         ),
-      ),
-      const SizedBox(height: 8),
-      Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-    ]);
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey), textAlign: TextAlign.center),
+      ]),
+    );
   }
 
   Widget _construirBotonLlamada() {

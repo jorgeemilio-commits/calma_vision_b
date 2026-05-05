@@ -97,6 +97,14 @@ class _PantallaLoginState extends State<PantallaLogin> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Aquí integramos el logo de la aplicación
+                  Image.asset(
+                    'assets/images/logo_app.png',
+                    height: 150, // Ajustado ligeramente para pantallas de celular
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 20),
+                  
                   Text(
                     _esRegistro ? "Crear Cuenta" : "Acceso Familiar",
                     style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: colorPrimario),
